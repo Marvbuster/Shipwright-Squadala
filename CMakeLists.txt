@@ -9,6 +9,9 @@ set(CMAKE_OSX_DEPLOYMENT_TARGET "10.15" CACHE STRING "Minimum OS X deployment ve
 project(Ship VERSION 9.2.3 LANGUAGES C CXX)
 include(CMake/soh-cvars.cmake)
 include(CMake/lus-cvars.cmake)
+# Fix consteval issue with Apple Clang 17+ on macOS 26 SDK
+add_compile_definitions(FMT_CONSTEVAL=constexpr)
+
 set(SPDLOG_LEVEL_TRACE 0)
 set(SPDLOG_LEVEL_OFF 6)
 set(SPDLOG_MIN_CUTOFF SPDLOG_LEVEL_TRACE CACHE STRING "cutoff at trace")
