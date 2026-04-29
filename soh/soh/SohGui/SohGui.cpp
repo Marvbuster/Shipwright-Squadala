@@ -86,6 +86,7 @@ std::shared_ptr<EntranceTracker::EntranceTrackerWindow> mEntranceTrackerWindow;
 std::shared_ptr<ItemTrackerSettingsWindow> mItemTrackerSettingsWindow;
 std::shared_ptr<ItemTrackerWindow> mItemTrackerWindow;
 std::shared_ptr<TimeSplitWindow> mTimeSplitWindow;
+std::shared_ptr<LiveGen::LiveGenPanel> mLiveGenWindow;
 std::shared_ptr<PlandomizerWindow> mPlandomizerWindow;
 std::shared_ptr<SohModalWindow> mModalWindow;
 std::shared_ptr<Notification::Window> mNotificationWindow;
@@ -187,6 +188,8 @@ void SetupGuiElements() {
     gui->AddGuiWindow(mItemTrackerSettingsWindow);
     mTimeSplitWindow = std::make_shared<TimeSplitWindow>(CVAR_WINDOW("TimeSplits"), "Time Splits", ImVec2(450, 660));
     gui->AddGuiWindow(mTimeSplitWindow);
+    mLiveGenWindow = std::make_shared<LiveGen::LiveGenPanel>(CVAR_WINDOW("LiveGen"), "Dungeon Generator", ImVec2(520, 600));
+    gui->AddGuiWindow(mLiveGenWindow);
     mPlandomizerWindow =
         std::make_shared<PlandomizerWindow>(CVAR_WINDOW("PlandomizerEditor"), "Plandomizer Editor", ImVec2(850, 760));
     gui->AddGuiWindow(mPlandomizerWindow);
