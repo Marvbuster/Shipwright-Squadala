@@ -938,6 +938,12 @@ void Play_Update(PlayState* play) {
                                 SET_NEXT_GAMESTATE(&play->state, Play_Init, PlayState);
                                 gSaveContext.entranceIndex = play->nextEntranceIndex;
 
+                                // LiveGen: intercept entrance transitions
+                                {
+                                    extern s16 LiveGen_ProcessEntrance(s16 entrance);
+                                    gSaveContext.entranceIndex = LiveGen_ProcessEntrance(gSaveContext.entranceIndex);
+                                }
+
                                 if (gSaveContext.minigameState == 1) {
                                     gSaveContext.minigameState = 3;
                                 }

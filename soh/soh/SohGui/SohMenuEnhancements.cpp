@@ -1935,6 +1935,15 @@ void SohMenu::AddMenuEnhancements() {
         .HideInSearch(true)
         .Options(WindowButtonOptions().Tooltip("Enables the separate Time Splits Window."));
 
+    // LiveGen Squadala
+    path.sidebarName = "Squadala";
+    AddSidebarEntry("Enhancements", path.sidebarName, 1);
+    AddWidget(path, "Open Squadala", WIDGET_WINDOW_BUTTON)
+        .CVar(CVAR_WINDOW("LiveGen"))
+        .RaceDisable(false)
+        .WindowName("Squadala")
+        .Options(WindowButtonOptions().Tooltip("Generate new dungeons with AI. Requires the LiveGen sidecar."));
+
     // Timers
     path.sidebarName = "Timers";
     AddSidebarEntry("Enhancements", path.sidebarName, 3);

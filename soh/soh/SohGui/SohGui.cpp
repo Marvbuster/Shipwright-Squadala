@@ -188,7 +188,7 @@ void SetupGuiElements() {
     gui->AddGuiWindow(mItemTrackerSettingsWindow);
     mTimeSplitWindow = std::make_shared<TimeSplitWindow>(CVAR_WINDOW("TimeSplits"), "Time Splits", ImVec2(450, 660));
     gui->AddGuiWindow(mTimeSplitWindow);
-    mLiveGenWindow = std::make_shared<LiveGen::LiveGenPanel>(CVAR_WINDOW("LiveGen"), "Dungeon Generator", ImVec2(520, 600));
+    mLiveGenWindow = std::make_shared<LiveGen::LiveGenPanel>(CVAR_WINDOW("LiveGen"), "Squadala", ImVec2(520, 600));
     gui->AddGuiWindow(mLiveGenWindow);
     mPlandomizerWindow =
         std::make_shared<PlandomizerWindow>(CVAR_WINDOW("PlandomizerEditor"), "Plandomizer Editor", ImVec2(850, 760));

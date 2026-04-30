@@ -15,7 +15,12 @@ Client::Client(const std::string& baseUrl) : mBaseUrl(baseUrl) {}
 
 static GenerationResult ParseResult(const json& r) {
     GenerationResult result;
-    result.status = r.value("status", "error");
+    if (!r.contains("status")) {
+        result.status = "error";
+        result.error = "Invalid response from sidecar";
+        return result;
+    }
+    result.status = r["status"].get<std::string>();
 
     if (r.contains("question") && !r["question"].is_null()) {
         PlayerQuestion q;
@@ -43,8 +48,19 @@ SessionResponse Client::CreateSession(const std::string& prompt) {
     SessionResponse sr;
     try {
         json j = json::parse(response);
-        sr.sessionId = j.value("session_id", "");
-        sr.result = ParseResult(j["result"]);
+        // Handle array-wrapped responses (some reasoning models do this)
+        if (j.is_array() && !j.empty()) {
+            j = j[0];
+        }
+        if (j.contains("session_id")) {
+            sr.sessionId = j["session_id"].get<std::string>();
+        }
+        if (j.contains("result") && j["result"].is_object()) {
+            sr.result = ParseResult(j["result"]);
+        } else {
+            // Maybe the result is at top level
+            sr.result = ParseResult(j);
+        }
     } catch (const std::exception& e) {
         SPDLOG_ERROR("LiveGen: Failed to parse session response: {}", e.what());
         sr.result.status = "error";
@@ -90,7 +106,7 @@ std::string Client::HttpPost(const std::string& url, const json& body) {
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &responseStr);
-    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 30L);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 300L);
 
     CURLcode res = curl_easy_perform(curl);
     if (res != CURLE_OK) {
