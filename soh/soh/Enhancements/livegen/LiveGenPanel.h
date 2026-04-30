@@ -33,11 +33,28 @@ class LiveGenPanel : public Ship::GuiWindow {
     State mState = State::IDLE;
     std::string mLastSpecJson;
 
-    // Background thread for HTTP calls
+    // Background thread
     std::mutex mResultMutex;
     std::optional<GenerationResult> mPendingResult;
     std::optional<std::string> mPendingSessionId;
     std::atomic<bool> mRequestInFlight{false};
+
+    // Tabs
+    enum class Tab { GENERATE, DUNGEONS };
+    Tab mActiveTab = Tab::DUNGEONS;
+
+    // Dungeon list cache
+    struct DungeonEntry {
+        std::string id;
+        std::string name;
+        std::string theme;
+        std::string difficulty;
+        int rooms = 0;
+        bool compiled = false;
+    };
+    std::vector<DungeonEntry> mDungeonList;
+    std::string mActiveDungeonId;
+    int mDungeonListRefreshCounter = 0;
 
     void StartSession();
     void SendReply();
@@ -46,6 +63,8 @@ class LiveGenPanel : public Ship::GuiWindow {
     void DrawChatHistory();
     void DrawInputArea();
     void DrawStatusBar();
+    void DrawDungeonList();
+    void RefreshDungeonList();
 };
 
 } // namespace LiveGen

@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <atomic>
+#include <string>
 
 namespace LiveGen {
 
@@ -14,7 +15,7 @@ class EntranceManager {
     static EntranceManager& Instance();
 
     // Activate: next door transition goes to our dungeon
-    void Activate(int16_t targetEntrance);
+    void Activate(int16_t targetEntrance, const std::string& dungeonName = "Custom Dungeon");
 
     // Deactivate: doors work normally again
     void Deactivate();
@@ -28,6 +29,7 @@ class EntranceManager {
   private:
     std::atomic<bool> mActive{false};
     int16_t mTargetEntrance = 0;
+    std::string mDungeonName;
 };
 
 } // namespace LiveGen

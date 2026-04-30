@@ -31,11 +31,11 @@ class Client {
     SessionResponse CreateSession(const std::string& prompt);
     GenerationResult SendMessage(const std::string& sessionId, const std::string& message);
     bool IsHealthy();
+    std::string HttpPost(const std::string& url, const nlohmann::json& body);
+    std::string HttpGet(const std::string& url);
 
   private:
     std::string mBaseUrl;
-    std::string HttpPost(const std::string& url, const nlohmann::json& body);
-    std::string HttpGet(const std::string& url);
 };
 
 } // namespace LiveGen

@@ -1,5 +1,6 @@
 #include "LiveGenPanel.h"
 #include "LiveGenEntrance.h"
+#include "LiveGenHotReload.h"
 #include <imgui.h>
 #include <spdlog/spdlog.h>
 
@@ -29,13 +30,25 @@ void LiveGenPanel::CheckPendingResult() {
 
 void LiveGenPanel::DrawElement() {
     ImGui::SetNextWindowSize(ImVec2(520, 600), ImGuiCond_FirstUseEver);
-    ImGui::Text("Squadala");
-    ImGui::Separator();
     DrawStatusBar();
     ImGui::Separator();
-    DrawChatHistory();
-    ImGui::Separator();
-    DrawInputArea();
+
+    // Tabs
+    if (ImGui::BeginTabBar("SquadalaTabs")) {
+        if (ImGui::BeginTabItem("Generate")) {
+            mActiveTab = Tab::GENERATE;
+            DrawChatHistory();
+            ImGui::Separator();
+            DrawInputArea();
+            ImGui::EndTabItem();
+        }
+        if (ImGui::BeginTabItem("My Dungeons")) {
+            mActiveTab = Tab::DUNGEONS;
+            DrawDungeonList();
+            ImGui::EndTabItem();
+        }
+        ImGui::EndTabBar();
+    }
 }
 
 void LiveGenPanel::DrawStatusBar() {
@@ -56,15 +69,17 @@ void LiveGenPanel::DrawStatusBar() {
         case State::IDLE:     ImGui::TextDisabled("Ready"); break;
         case State::WAITING:  ImGui::TextColored(ImVec4(1, 1, 0, 1), "Thinking..."); break;
         case State::QUESTION: ImGui::TextColored(ImVec4(0, 0.8f, 1, 1), "Your turn"); break;
-        case State::COMPLETE: ImGui::TextColored(ImVec4(0.1f, 1, 0.1f, 1), "Done!"); break;
+        case State::COMPLETE: ImGui::TextColored(ImVec4(0.1f, 1, 0.1f, 1), "Ready!"); break;
         case State::ERROR:    ImGui::TextColored(ImVec4(1, 0, 0, 1), "Error"); break;
     }
 }
 
 void LiveGenPanel::DrawChatHistory() {
-    ImGui::BeginChild("ChatHistory", ImVec2(0, -80), true);
+    // Use all available height minus input area + padding
+    float inputHeight = (mState == State::COMPLETE) ? 52 : 68;
+    ImGui::BeginChild("ChatHistory", ImVec2(0, -inputHeight), true);
 
-    if (mChatHistory.empty()) {
+    if (mChatHistory.empty() && mState == State::IDLE) {
         ImGui::TextDisabled("Describe the dungeon you want to explore...");
         ImGui::TextDisabled("");
         ImGui::TextDisabled("Examples:");
@@ -95,30 +110,33 @@ void LiveGenPanel::DrawChatHistory() {
         ImGui::TextColored(ImVec4(1, 1, 0, 0.7f), "...");
     }
 
+    // Show dungeon summary nicely (not raw JSON)
     if (mState == State::COMPLETE && !mLastSpecJson.empty()) {
         ImGui::Separator();
-        ImGui::TextColored(ImVec4(0.1f, 1.0f, 0.1f, 1.0f), "Dungeon Spec:");
-        ImGui::BeginChild("SpecPreview", ImVec2(0, 80), true);
-        ImGui::TextWrapped("%s", mLastSpecJson.c_str());
-        ImGui::EndChild();
+        try {
+            auto spec = nlohmann::json::parse(mLastSpecJson);
+            std::string name = spec.value("metadata", nlohmann::json::object()).value("name", "Dungeon");
+            std::string theme = spec.value("metadata", nlohmann::json::object()).value("theme", "?");
+            std::string diff = spec.value("metadata", nlohmann::json::object()).value("difficulty", "?");
+            int rooms = spec.value("rooms", nlohmann::json::array()).size();
+            int conns = spec.value("connections", nlohmann::json::array()).size();
 
-        // ENTER DUNGEON button
-        bool portalActive = EntranceManager::Instance().IsActive();
-        if (portalActive) {
-            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.2f, 1.0f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.9f, 0.4f, 1.0f, 1.0f));
-            if (ImGui::Button("Portal Active! Walk through any door...", ImVec2(ImGui::GetContentRegionAvail().x, 32))) {
-                EntranceManager::Instance().Deactivate();
+            ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.4f, 1.0f), "%s", name.c_str());
+            ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "%s | %s | %d rooms | %d doors",
+                theme.c_str(), diff.c_str(), rooms, conns);
+
+            // List rooms
+            for (auto& room : spec["rooms"]) {
+                std::string rid = room.value("id", "?");
+                std::string tmpl = room.value("template", "?");
+                int enemies = room.value("actors", nlohmann::json::array()).size();
+                int chests = room.value("chests", nlohmann::json::array()).size();
+                ImGui::BulletText("%s (%s)%s%s", rid.c_str(), tmpl.c_str(),
+                    enemies > 0 ? (" | " + std::to_string(enemies) + " enemies").c_str() : "",
+                    chests > 0 ? (" | " + std::to_string(chests) + " chests").c_str() : "");
             }
-            ImGui::PopStyleColor(2);
-        } else {
-            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.1f, 0.6f, 0.1f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.2f, 0.8f, 0.2f, 1.0f));
-            if (ImGui::Button("Enter Dungeon", ImVec2(ImGui::GetContentRegionAvail().x, 32))) {
-                // Activate portal — next door goes to Deku Tree entrance (0x0000)
-                EntranceManager::Instance().Activate(0x0000);
-            }
-            ImGui::PopStyleColor(2);
+        } catch (...) {
+            ImGui::TextWrapped("%s", mLastSpecJson.c_str());
         }
     }
 
@@ -129,7 +147,40 @@ void LiveGenPanel::DrawChatHistory() {
 }
 
 void LiveGenPanel::DrawInputArea() {
-    if (mState == State::IDLE || mState == State::COMPLETE || mState == State::ERROR) {
+    if (mState == State::COMPLETE) {
+        // ENTER DUNGEON button (replaces Go!)
+        bool portalActive = EntranceManager::Instance().IsActive();
+        if (portalActive) {
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.2f, 1.0f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.9f, 0.4f, 1.0f, 1.0f));
+            if (ImGui::Button("Portal Active! Walk through any door...", ImVec2(ImGui::GetContentRegionAvail().x, 36))) {
+                EntranceManager::Instance().Deactivate();
+            }
+            ImGui::PopStyleColor(2);
+        } else {
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.1f, 0.7f, 0.2f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.2f, 0.9f, 0.3f, 1.0f));
+            if (ImGui::Button("Enter Dungeon", ImVec2(ImGui::GetContentRegionAvail().x * 0.7f, 36))) {
+                // Hot-reload dungeon and activate portal
+                HotReloadDungeon("./mods/zzz_squadala_dungeon.o2r");
+                // Get dungeon name from spec
+                std::string dname = "Custom Dungeon";
+                try {
+                    auto spec = nlohmann::json::parse(mLastSpecJson);
+                    dname = spec.value("metadata", nlohmann::json::object()).value("name", dname);
+                } catch (...) {}
+                EntranceManager::Instance().Activate(0x0000, dname);
+            }
+            ImGui::PopStyleColor(2);
+            ImGui::SameLine();
+            if (ImGui::Button("New", ImVec2(ImGui::GetContentRegionAvail().x, 36))) {
+                mState = State::IDLE;
+                mChatHistory.clear();
+                mLastSpecJson.clear();
+                mSessionId.clear();
+            }
+        }
+    } else if (mState == State::IDLE || mState == State::ERROR) {
         ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 5);
         if (ImGui::InputTextWithHint("##prompt", "Describe your dungeon...", mPromptInput.data(), mPromptInput.size(),
                              ImGuiInputTextFlags_EnterReturnsTrue)) {
@@ -207,7 +258,7 @@ void LiveGenPanel::HandleResult(const GenerationResult& result) {
         mLastSpecJson = result.spec->dump(2);
         std::string name = result.spec->value("metadata", nlohmann::json::object())
                                .value("name", "Unknown Dungeon");
-        mChatHistory.push_back({ChatMessage::SYSTEM, "Dungeon '" + name + "' generated!"});
+        mChatHistory.push_back({ChatMessage::SYSTEM, "Dungeon ready!"});
         mState = State::COMPLETE;
         SPDLOG_INFO("LiveGen: Dungeon generated: {}", name);
     } else if (result.status == "error") {
@@ -215,6 +266,106 @@ void LiveGenPanel::HandleResult(const GenerationResult& result) {
         mChatHistory.push_back({ChatMessage::SYSTEM, "Error: " + err});
         mState = State::ERROR;
     }
+}
+
+void LiveGenPanel::RefreshDungeonList() {
+    try {
+        std::string response = mClient.HttpGet("http://127.0.0.1:7777/dungeons");
+        auto data = nlohmann::json::parse(response);
+        mActiveDungeonId = data.value("active_id", "");
+        mDungeonList.clear();
+        for (auto& d : data["dungeons"]) {
+            DungeonEntry entry;
+            entry.id = d.value("id", "");
+            entry.name = d.value("name", "?");
+            entry.theme = d.value("theme", "?");
+            entry.difficulty = d.value("difficulty", "?");
+            entry.rooms = d.value("rooms", 0);
+            entry.compiled = d.value("compiled", false);
+            mDungeonList.push_back(entry);
+        }
+    } catch (...) {}
+}
+
+void LiveGenPanel::DrawDungeonList() {
+    // Refresh every 5 seconds
+    if (mDungeonListRefreshCounter++ % 300 == 0) {
+        RefreshDungeonList();
+    }
+
+    if (mDungeonList.empty()) {
+        ImGui::TextDisabled("No dungeons yet. Go to Generate tab!");
+        return;
+    }
+
+    ImGui::BeginChild("DungeonList", ImVec2(0, -5), true);
+
+    for (auto& dungeon : mDungeonList) {
+        bool isActive = (dungeon.id == mActiveDungeonId);
+
+        ImGui::PushID(dungeon.id.c_str());
+
+        // Dungeon name + status
+        if (isActive) {
+            ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.4f, 1.0f), "%s", dungeon.name.c_str());
+        } else {
+            ImGui::Text("%s", dungeon.name.c_str());
+        }
+        ImGui::SameLine(ImGui::GetWindowWidth() - 200);
+        ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "%s | %s | %dr",
+            dungeon.theme.c_str(), dungeon.difficulty.c_str(), dungeon.rooms);
+
+        // Buttons
+        if (isActive && dungeon.compiled) {
+            bool portalActive = EntranceManager::Instance().IsActive();
+            if (portalActive) {
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.2f, 1.0f, 1.0f));
+                if (ImGui::Button("Portal Active! Walk through any door...", ImVec2(ImGui::GetContentRegionAvail().x - 40, 28))) {
+                    EntranceManager::Instance().Deactivate();
+                }
+                ImGui::PopStyleColor();
+            } else {
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.1f, 0.7f, 0.2f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.2f, 0.9f, 0.3f, 1.0f));
+                if (ImGui::Button("Enter Dungeon", ImVec2(ImGui::GetContentRegionAvail().x - 40, 28))) {
+                    HotReloadDungeon("./mods/zzz_squadala_dungeon.o2r");
+                    EntranceManager::Instance().Activate(0x0000, dungeon.name);
+                }
+                ImGui::PopStyleColor(2);
+            }
+            ImGui::SameLine();
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.5f, 0.1f, 0.1f, 1.0f));
+            if (ImGui::Button("X", ImVec2(28, 28))) {
+                // TODO: delete
+            }
+            ImGui::PopStyleColor();
+        } else if (isActive && !dungeon.compiled) {
+            ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "Restart SoH to load this dungeon!");
+        } else {
+            if (ImGui::Button("Activate & Compile", ImVec2(140, 24))) {
+                std::string did = dungeon.id;
+                std::thread([this, did]() {
+                    auto resp = mClient.HttpPost("http://127.0.0.1:7777/dungeons/" + did + "/activate",
+                        nlohmann::json::object());
+                    SPDLOG_INFO("LiveGen: Activate: {}", resp.substr(0, 200));
+                    // Hot-reload so no restart needed!
+                    HotReloadDungeon("./mods/zzz_squadala_dungeon.o2r");
+                    mDungeonListRefreshCounter = 0;
+                }).detach();
+            }
+            ImGui::SameLine();
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.5f, 0.1f, 0.1f, 1.0f));
+            if (ImGui::Button("X", ImVec2(28, 24))) {
+                // TODO: delete
+            }
+            ImGui::PopStyleColor();
+        }
+
+        ImGui::Separator();
+        ImGui::PopID();
+    }
+
+    ImGui::EndChild();
 }
 
 } // namespace LiveGen
