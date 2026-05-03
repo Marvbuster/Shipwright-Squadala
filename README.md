@@ -1,90 +1,21 @@
-<p align="center">
-  <img src="docs/shiptitle.squadala.png" alt="Squadala" width="640">
-</p>
+# Squadala SoH Fork
 
-```mermaid
-graph LR
-    A[Player Prompt] -->|HTTP| B(Python Sidecar)
-    B -->|Gemma 4 / Claude| C{LLM}
-    C -->|DungeonSpec JSON| B
-    B -->|Compile .o2r| D[Scene Builder]
-    D -->|Hot-Reload| E[Ship of Harkinian]
-    E -->|Portal System| F[Enter Dungeon!]
+> The C++ side of the **[Squadala](https://github.com/Marvbuster/squadala)** AI Dungeon Generator project.
 
-    style A fill:#4a9eff,color:#fff
-    style C fill:#ff6b6b,color:#fff
-    style F fill:#51cf66,color:#fff
-```
+This fork adds an in-game ImGui panel, HTTP client, entrance override, and hot-reload mechanism to Ship of Harkinian. Together with the [Python sidecar](https://github.com/Marvbuster/squadala) it generates and loads custom dungeons at runtime.
 
-# Squadala — AI Dungeon Generator for Ship of Harkinian
+**For the full project (including the sidecar, tooling, wiki, and documentation), see the main repo:**
+👉 **https://github.com/Marvbuster/squadala**
 
-> *"Squadala! We're off!"* — This fork adds AI-powered dungeon generation to OoT.
+This fork is referenced as a git submodule there. Clone the main repo with `--recurse-submodules` to get everything.
 
-Generate new Zelda dungeons with a local LLM, directly from within the game. Describe a dungeon, the AI designs it, walk through any door to enter.
+## What's added on top of upstream Shipwright
 
-## Architecture
-
-```mermaid
-graph TB
-    subgraph SoH["Ship of Harkinian (C++)"]
-        Panel[Squadala Panel<br/>ImGui UI]
-        Portal[Entrance Override<br/>Portal System]
-        HotReload[Hot-Reload<br/>Runtime .o2r]
-    end
-
-    subgraph Sidecar["Python Sidecar (FastAPI :7777)"]
-        Agent[LLM Agent<br/>Structured JSON]
-        Compiler[Scene Compiler<br/>DungeonSpec to .o2r]
-        Store[Dungeon Store<br/>~/.squadala/]
-    end
-
-    subgraph LLM["Local LLM"]
-        Gemma[Gemma 4 26B<br/>via MLX]
-    end
-
-    Panel <-->|HTTP| Agent
-    Agent <-->|Tool-Use| Gemma
-    Agent --> Store
-    Store --> Compiler
-    Compiler --> HotReload
-    Panel --> Portal
-
-    style SoH fill:#1a1a2e,color:#fff
-    style Sidecar fill:#16213e,color:#fff
-    style LLM fill:#0f3460,color:#fff
-```
-
-## Features
-
-| Feature | Status | Description |
-|---------|--------|-------------|
-| LLM Dungeon Generation | Done | Structured JSON output, 100% success rate |
-| In-Game UI | Done | Squadala panel with Generate + My Dungeons tabs |
-| Portal System | Done | Entrance override redirects any door |
-| Hot-Reload | Done | No restart needed |
-| Dungeon Persistence | Done | Saved in `~/.squadala/dungeons/` |
-| Dungeon Notification | Done | Shows dungeon name on entry |
-| Actor Injection | WIP | Custom enemies and chests |
-| Custom Geometry | Planned | MeshLLM / procedural rooms |
-
-## Quick Start
-
-1. Build this fork (same as SoH, see [BUILDING.md](docs/BUILDING.md))
-2. Start the Python sidecar: `cd sidecar && uv run uvicorn livegen.api:app --port 7777`
-3. Start a local LLM: `mlx_lm.server --model mlx-community/gemma-4-26b-a4b-it-4bit --port 11434`
-4. Launch the game, open Squadala (ESC > Enhancements > Squadala)
-5. Describe a dungeon, click Enter, walk through a door!
-
-## Acknowledgments
-
-This project stands on the shoulders of giants:
-
-- **[Ship of Harkinian](https://github.com/HarbourMasters/Shipwright)** by HarbourMasters — the OoT PC port that makes everything possible
-- **The SoH Randomizer Team** — the entrance override and dungeon shuffling systems are the foundation of Squadala's portal system
-- **[OoT Decompilation](https://github.com/zeldaret/oot)** by zeldaret — actor IDs, object mappings, scene formats
-- **[OoT Randomizer](https://github.com/OoTRandomizer/OoT-Randomizer)** — dungeon logic and connectivity data
-- **[libultraship](https://github.com/Kenix3/libultraship/)** — the runtime framework powering mod loading and resource management
-- **[Fast64](https://github.com/HarbourMasters/fast64)** — Blender tools for OoT scene creation
+- `soh/soh/Enhancements/livegen/` — Squadala panel, HTTP client, hot-reload, entrance override
+- C bridge in `z_play.c` for runtime entrance redirection
+- Engine hooks in `z_scene_otr.cpp` and `z_play_otr.cpp` for Custom Scene/Room loading
+- Collision rebind in `Scene_CommandCollisionHeader` for hot-loaded collision data
+- Diagnostic logging in `libultraship/src/fast/interpreter.cpp` for custom geometry debugging
 
 ---
 
