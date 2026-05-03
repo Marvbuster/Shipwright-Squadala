@@ -4,6 +4,12 @@
 #include <imgui.h>
 #include <spdlog/spdlog.h>
 
+extern "C" {
+#include "z64.h"
+extern PlayState* gPlayState;
+void Actor_Kill(Actor* actor);
+}
+
 namespace LiveGen {
 
 void LiveGenPanel::InitElement() {
@@ -13,6 +19,20 @@ void LiveGenPanel::InitElement() {
 
 void LiveGenPanel::UpdateElement() {
     CheckPendingResult();
+
+    // Deferred Debug Room: evict + warp happens here (between frames, safe)
+    if (mDebugRoomPending) {
+        mDebugRoomPending = false;
+        HotReloadDungeon("./debug_rooms/zzz_squadala_dungeon.o2r");
+        SetDebugRoomActive(true);
+        WarpToEntrance(0x0000);
+        mDebugRoomActive = true;
+    }
+
+    // While in debug room: reinforce transition block (belt-and-suspenders)
+    if (mDebugRoomActive && gPlayState) {
+        gPlayState->transiActorCtx.numActors = 0;
+    }
 }
 
 void LiveGenPanel::CheckPendingResult() {
@@ -63,6 +83,15 @@ void LiveGenPanel::DrawStatusBar() {
     } else {
         ImGui::TextColored(ImVec4(1.0f, 0.2f, 0.2f, 1.0f), "Sidecar: Not Running");
     }
+
+    // Debug Room button — hot-reloads custom geometry and warps directly
+    ImGui::SameLine();
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.9f, 0.5f, 0.1f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(1.0f, 0.6f, 0.2f, 1.0f));
+    if (ImGui::SmallButton("Debug Room")) {
+        mDebugRoomPending = true;  // Deferred to next UpdateElement (safe, between frames)
+    }
+    ImGui::PopStyleColor(2);
 
     ImGui::SameLine(ImGui::GetWindowWidth() - 120);
     switch (mState) {
@@ -162,7 +191,7 @@ void LiveGenPanel::DrawInputArea() {
             ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.2f, 0.9f, 0.3f, 1.0f));
             if (ImGui::Button("Enter Dungeon", ImVec2(ImGui::GetContentRegionAvail().x * 0.7f, 36))) {
                 // Hot-reload dungeon and activate portal
-                HotReloadDungeon("./mods/zzz_squadala_dungeon.o2r");
+                HotReloadDungeon("./debug_rooms/zzz_squadala_dungeon.o2r");
                 // Get dungeon name from spec
                 std::string dname = "Custom Dungeon";
                 try {
@@ -328,7 +357,7 @@ void LiveGenPanel::DrawDungeonList() {
                 ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.1f, 0.7f, 0.2f, 1.0f));
                 ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.2f, 0.9f, 0.3f, 1.0f));
                 if (ImGui::Button("Enter Dungeon", ImVec2(ImGui::GetContentRegionAvail().x - 40, 28))) {
-                    HotReloadDungeon("./mods/zzz_squadala_dungeon.o2r");
+                    HotReloadDungeon("./debug_rooms/zzz_squadala_dungeon.o2r");
                     EntranceManager::Instance().Activate(0x0000, dungeon.name);
                 }
                 ImGui::PopStyleColor(2);
@@ -349,7 +378,7 @@ void LiveGenPanel::DrawDungeonList() {
                         nlohmann::json::object());
                     SPDLOG_INFO("LiveGen: Activate: {}", resp.substr(0, 200));
                     // Hot-reload so no restart needed!
-                    HotReloadDungeon("./mods/zzz_squadala_dungeon.o2r");
+                    HotReloadDungeon("./debug_rooms/zzz_squadala_dungeon.o2r");
                     mDungeonListRefreshCounter = 0;
                 }).detach();
             }

@@ -56,6 +56,10 @@ class LiveGenPanel : public Ship::GuiWindow {
     std::string mActiveDungeonId;
     int mDungeonListRefreshCounter = 0;
 
+    // Debug Room deferred loading (evict between frames, not during rendering)
+    bool mDebugRoomPending = false;
+    bool mDebugRoomActive = false;
+
     void StartSession();
     void SendReply();
     void HandleResult(const GenerationResult& result);

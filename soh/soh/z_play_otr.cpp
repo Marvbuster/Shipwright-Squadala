@@ -9,6 +9,7 @@
 
 extern "C" void Play_InitScene(PlayState* play, s32 spawn);
 extern "C" void Play_InitEnvironment(PlayState* play, s16 skyboxId);
+extern "C" bool LiveGen_IsDebugRoomActive();
 void OTRPlay_InitScene(PlayState* play, s32 spawn);
 s32 OTRScene_ExecuteCommands(PlayState* play, SOH::Scene* scene);
 
@@ -78,6 +79,12 @@ void OTRPlay_InitScene(PlayState* play, s32 spawn) {
     YREG(15) = 0;
     gSaveContext.worldMapArea = 0;
     OTRScene_ExecuteCommands(play, (SOH::Scene*)play->sceneSegment);
+
+    if (LiveGen_IsDebugRoomActive()) {
+        SPDLOG_WARN("LiveGen: clearing scene transition actors after scene commands");
+        play->transiActorCtx.numActors = 0;
+        play->transiActorCtx.list = nullptr;
+    }
 
     GameInteractor_ExecuteAfterSceneCommands(play->sceneNum);
     Play_InitEnvironment(play, play->skyboxId);

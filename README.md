@@ -1,10 +1,6 @@
-# Squadala — AI Dungeon Generator for Ship of Harkinian
-
-> *"Squadala! We're off!"* — This fork adds AI-powered dungeon generation to OoT.
-
-Generate new Zelda dungeons with a local LLM, directly from within the game. Describe a dungeon, the AI designs it, walk through any door to enter.
-
-## How It Works
+<p align="center">
+  <img src="docs/shiptitle.squadala.png" alt="Squadala" width="640">
+</p>
 
 ```mermaid
 graph LR
@@ -19,6 +15,12 @@ graph LR
     style C fill:#ff6b6b,color:#fff
     style F fill:#51cf66,color:#fff
 ```
+
+# Squadala — AI Dungeon Generator for Ship of Harkinian
+
+> *"Squadala! We're off!"* — This fork adds AI-powered dungeon generation to OoT.
+
+Generate new Zelda dungeons with a local LLM, directly from within the game. Describe a dungeon, the AI designs it, walk through any door to enter.
 
 ## Architecture
 

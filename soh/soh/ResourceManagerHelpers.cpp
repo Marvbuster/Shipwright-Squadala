@@ -297,12 +297,21 @@ extern "C" void ResourceMgr_PushCurrentDirectory(char* path) {
 }
 
 extern "C" Gfx* ResourceMgr_LoadGfxByName(const char* path) {
-    // When an alt resource exists for the DL, we need to unload the original asset
-    // to clear the cache so the alt asset will be loaded instead
-    // OTRTODO: If Alt loading over original cache is fixed, this line can most likely be removed
     ResourceMgr_UnloadOriginalWhenAltExists(path);
 
-    auto res = std::static_pointer_cast<Fast::DisplayList>(ResourceMgr_GetResourceByNameHandlingMQ(path));
+    auto base = ResourceMgr_GetResourceByNameHandlingMQ(path);
+    auto res = std::static_pointer_cast<Fast::DisplayList>(base);
+
+    if (std::string(path).find("squadala") != std::string::npos) {
+        SPDLOG_INFO("LiveGen LoadGfx path={} res={} instrs={}",
+                    path, (void*)res.get(), res ? res->Instructions.size() : 0);
+    }
+
+    if (res == nullptr || res->Instructions.empty()) {
+        SPDLOG_ERROR("LiveGen LoadGfx failed path={}", path);
+        return nullptr;
+    }
+
     return (Gfx*)&res->Instructions[0];
 }
 

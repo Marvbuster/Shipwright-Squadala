@@ -1,5 +1,7 @@
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 #include "ResourceManagerHelpers.h"
+
+extern "C" bool LiveGen_IsDebugRoomActive();
 #include <libultraship/libultraship.h>
 #include "soh/resource/type/Scene.h"
 #include <ship/utils/StringHelper.h>
@@ -72,8 +74,25 @@ bool Scene_CommandUnused2(PlayState* play, SOH::ISceneCommand* cmd) {
 }
 
 bool Scene_CommandCollisionHeader(PlayState* play, SOH::ISceneCommand* cmd) {
-    // SOH::SetCollisionHeader* cmdCol = std::static_pointer_cast<SOH::SetCollisionHeader>(cmd);
     SOH::SetCollisionHeader* cmdCol = (SOH::SetCollisionHeader*)cmd;
+
+    // Re-resolve collision from archive so hot-loaded overrides take effect
+    // even when the Scene resource is cached.
+    if (!cmdCol->fileName.empty()) {
+        auto resource =
+            Ship::Context::GetInstance()->GetResourceManager()->LoadResourceProcess(cmdCol->fileName.c_str());
+        auto collision = std::static_pointer_cast<SOH::CollisionHeader>(resource);
+        if (collision != nullptr) {
+            cmdCol->collisionHeader = collision;
+            SPDLOG_INFO("Collision rebind OK: {} verts={} polys={}",
+                         cmdCol->fileName,
+                         collision->collisionHeaderData.numVertices,
+                         collision->collisionHeaderData.numPolygons);
+        } else {
+            SPDLOG_ERROR("Collision rebind FAILED for {}", cmdCol->fileName);
+        }
+    }
+
     BgCheck_Allocate(&play->colCtx, play, (CollisionHeader*)cmdCol->GetRawPointer());
 
     return false;
@@ -474,7 +493,13 @@ extern "C" s32 OTRfunc_800973FC(PlayState* play, RoomContext* roomCtx) {
             OTRScene_ExecuteCommands(play, (SOH::Scene*)roomCtx->roomToLoad);
 
             Player_SetBootData(play, GET_PLAYER(play));
-            Actor_SpawnTransitionActors(play, &play->actorCtx);
+            if (!LiveGen_IsDebugRoomActive()) {
+                Actor_SpawnTransitionActors(play, &play->actorCtx);
+            } else {
+                play->transiActorCtx.numActors = 0;
+                play->transiActorCtx.list = nullptr;
+                SPDLOG_INFO("LiveGen: Skipped Actor_SpawnTransitionActors (debug room)");
+            }
 
             GameInteractor_ExecuteAfterSceneCommands(play->sceneNum);
 
@@ -488,6 +513,11 @@ extern "C" s32 OTRfunc_800973FC(PlayState* play, RoomContext* roomCtx) {
 }
 
 extern "C" s32 OTRfunc_8009728C(PlayState* play, RoomContext* roomCtx, s32 roomNum) {
+    if (LiveGen_IsDebugRoomActive() && roomNum != 0) {
+        SPDLOG_WARN("LiveGen: blocked room load {} while debug room is active", roomNum);
+        return 0;
+    }
+
     u32 size;
 
     if (roomCtx->status == 0) {
@@ -516,7 +546,26 @@ extern "C" s32 OTRfunc_8009728C(PlayState* play, RoomContext* roomCtx, s32 roomN
 
         roomCtx->unk_30 ^= 1;
 
-        SPDLOG_INFO("Room Init - curRoom.num: {0:#x}", roomCtx->curRoom.num);
+        // LiveGen diagnostic: definitively identify original vs custom room
+        {
+            int meshType = -1;
+            int polyNum = -1;
+            for (auto& cmd : roomData->commands) {
+                if (cmd->cmdId == SOH::SceneCommandID::SetMesh) {
+                    auto* mesh = (SOH::SetMesh*)cmd.get();
+                    meshType = mesh->meshHeader.base.type;
+                    if (meshType == 0) polyNum = mesh->meshHeader.polygon0.num;
+                    else if (meshType == 2) polyNum = mesh->meshHeader.polygon2.num;
+                    break;
+                }
+            }
+            SPDLOG_INFO("Room Init - num: {:#x} path: {} meshType: {} polyNum: {} cmds: {} isCustom: {}",
+                         roomCtx->curRoom.num,
+                         play->roomList[roomNum].fileName ? play->roomList[roomNum].fileName : "(null)",
+                         meshType, polyNum,
+                         roomData->commands.size(),
+                         roomData->GetInitData()->IsCustom);
+        }
 
         return 1;
     }

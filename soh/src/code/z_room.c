@@ -71,6 +71,11 @@ void func_80095AB4(PlayState* play, Room* room, u32 flags) {
     polygonDlist = SEGMENTED_TO_VIRTUAL(polygon0->start);
     for (i = 0; i < polygon0->num; i++) {
         if ((flags & 1) && (polygonDlist->opa != NULL)) {
+            static s32 sLiveGenLogs = 0;
+            if (sLiveGenLogs++ < 30) {
+                osSyncPrintf("LiveGen Room_Draw type0 room=%d segment=%p opa=%p flags=%x num=%d\n",
+                             room->num, room->segment, polygonDlist->opa, flags, polygon0->num);
+            }
             gSPDisplayList(POLY_OPA_DISP++, polygonDlist->opa);
         }
 
