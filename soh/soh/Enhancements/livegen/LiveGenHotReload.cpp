@@ -42,15 +42,18 @@ bool HotReloadDungeon(const std::string& o2rPath) {
         SPDLOG_INFO("LiveGen: Hot-reload — added archive: {}", o2rPath);
     }
 
-    // 2. Evict + preload Room, DL, VTX, Collision.
-    //    Do NOT evict the Scene — it crashes (play->roomList dangles).
-    //    The room-block hack (roomNum != 0) + En_Holl kill handles the old RoomList.
-    //    The Collision-Rebind in Scene_CommandCollisionHeader re-resolves our collision.
+    // 2. Evict + preload Room, DL, VTX, Collision, Mario decoration resources.
+    //    Mario must be preloaded too — the LiveGen_DrawSpinningMario hook fires
+    //    every frame and will pass NULL to gSPDisplayList if Mario isn't cached.
     std::vector<std::string> paths = {
         "scenes/nonmq/ydan_scene/ydan_room_0",
         "scenes/nonmq/ydan_scene/ydan_sceneCollisionHeader_00B610",
         "scenes/nonmq/ydan_scene/squadala_box_DL",
         "scenes/nonmq/ydan_scene/squadala_box_Vtx",
+        "scenes/nonmq/ydan_scene/squadala_mario_DL",
+        "scenes/nonmq/ydan_scene/squadala_mario_Vtx",
+        "scenes/nonmq/ydan_scene/squadala_pizza_DL",
+        "scenes/nonmq/ydan_scene/squadala_pizza_Vtx",
     };
 
     for (const auto& path : paths) {

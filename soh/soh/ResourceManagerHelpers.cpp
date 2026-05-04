@@ -302,10 +302,7 @@ extern "C" Gfx* ResourceMgr_LoadGfxByName(const char* path) {
     auto base = ResourceMgr_GetResourceByNameHandlingMQ(path);
     auto res = std::static_pointer_cast<Fast::DisplayList>(base);
 
-    if (std::string(path).find("squadala") != std::string::npos) {
-        SPDLOG_INFO("LiveGen LoadGfx path={} res={} instrs={}",
-                    path, (void*)res.get(), res ? res->Instructions.size() : 0);
-    }
+    // (LiveGen logging removed — was useful for debug, now noisy)
 
     if (res == nullptr || res->Instructions.empty()) {
         SPDLOG_ERROR("LiveGen LoadGfx failed path={}", path);

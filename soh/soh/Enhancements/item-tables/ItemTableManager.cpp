@@ -20,6 +20,14 @@ bool ItemTableManager::AddItemEntry(uint16_t tableID, uint16_t getItemID, GetIte
     } catch (const std::out_of_range& oor) { return false; }
 }
 
+bool ItemTableManager::SetItemEntry(uint16_t tableID, uint16_t getItemID, GetItemEntry getItemEntry) {
+    try {
+        ItemTable* itemTable = RetrieveItemTable(tableID);
+        (*itemTable)[getItemID] = getItemEntry;
+        return true;
+    } catch (const std::out_of_range& oor) { return false; }
+}
+
 GetItemEntry ItemTableManager::RetrieveItemEntry(uint16_t tableID, uint16_t getItemID) {
     try {
         ItemTable* itemTable = RetrieveItemTable(tableID);
