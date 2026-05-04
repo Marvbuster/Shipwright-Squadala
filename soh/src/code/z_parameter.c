@@ -1872,6 +1872,14 @@ u8 Return_Item(u8 itemID, ModIndex modId, ItemID returnItem) {
  * @return u8
  */
 u8 Item_Give(PlayState* play, u8 item) {
+    // Defensive null-item guard: SLOT(ITEM_NONE=0xFF) reads past the end of
+    // gItemSlots[] (56 entries) and the resulting slot indexes inventory.items
+    // out of bounds. Custom mods (LiveGen-style spectacle items with itemId=
+    // ITEM_NONE) reach this path through the standard get-item flow.
+    if (item == ITEM_NONE) {
+        return ITEM_NONE;
+    }
+
     // prevents getting sticks without the bag in case something got missed
     if (IS_RANDO && (item == ITEM_STICK || item == ITEM_STICKS_5 || item == ITEM_STICKS_10) &&
         Randomizer_GetSettingValue(RSK_SHUFFLE_DEKU_STICK_BAG) && CUR_UPG_VALUE(UPG_STICKS) == 0) {
