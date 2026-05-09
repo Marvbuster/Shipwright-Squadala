@@ -42,18 +42,23 @@ bool HotReloadDungeon(const std::string& o2rPath) {
         SPDLOG_INFO("LiveGen: Hot-reload — added archive: {}", o2rPath);
     }
 
-    // 2. Evict + preload Room, DL, VTX, Collision, Mario decoration resources.
-    //    Mario must be preloaded too — the LiveGen_DrawSpinningMario hook fires
-    //    every frame and will pass NULL to gSPDisplayList if Mario isn't cached.
+    // 2. Evict + preload all our scene/room/asset resources. Squadala paths
+    //    live entirely under `scenes/squadala/` — no overlap with vanilla, so
+    //    eviction is only needed for hot-reload (rebuilding the .o2r between
+    //    Debug-Room clicks); first-click is always a cache miss.
     std::vector<std::string> paths = {
-        "scenes/nonmq/ydan_scene/ydan_room_0",
-        "scenes/nonmq/ydan_scene/ydan_sceneCollisionHeader_00B610",
-        "scenes/nonmq/ydan_scene/squadala_box_DL",
-        "scenes/nonmq/ydan_scene/squadala_box_Vtx",
-        "scenes/nonmq/ydan_scene/squadala_mario_DL",
-        "scenes/nonmq/ydan_scene/squadala_mario_Vtx",
-        "scenes/nonmq/ydan_scene/squadala_pizza_DL",
-        "scenes/nonmq/ydan_scene/squadala_pizza_Vtx",
+        "scenes/squadala/dungeon_scene",
+        "scenes/squadala/collision",
+        "scenes/squadala/room_0",
+        "scenes/squadala/room_1",
+        "scenes/squadala/room0_DL",
+        "scenes/squadala/room0_Vtx",
+        "scenes/squadala/room1_DL",
+        "scenes/squadala/room1_Vtx",
+        "scenes/squadala/mario_DL",
+        "scenes/squadala/mario_Vtx",
+        "scenes/squadala/pizza_DL",
+        "scenes/squadala/pizza_Vtx",
     };
 
     for (const auto& path : paths) {

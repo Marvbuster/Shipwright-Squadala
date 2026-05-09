@@ -32,7 +32,7 @@ constexpr s16 PIZZA_ROT_OFFSET_Y = (s16)0x8000;
 // Path to the Pizza DL resource in our .o2r — resolved via GbiWrap __OTR__ mechanism.
 // The model already has its 60° X-tilt baked in by mesh_to_dl.py, so we only
 // apply translate + Y-spin here.
-static const char* PIZZA_DL_PATH = "__OTR__scenes/nonmq/ydan_scene/squadala_pizza_DL";
+static const char* PIZZA_DL_PATH = "__OTR__scenes/squadala/pizza_DL";
 
 extern "C" void LiveGen_DrawSpinningMario(PlayState* play) {
     if (!LiveGen::IsDebugRoomActive()) {

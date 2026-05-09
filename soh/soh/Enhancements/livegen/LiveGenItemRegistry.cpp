@@ -40,7 +40,7 @@ extern "C" GetItemEntry ItemTable_Retrieve(int16_t getItemID);
 static constexpr uint8_t  GI_LIVEGEN_MARIO   = 0x7E;     // unused in z64item.h, fits 7-bit chest params
 static constexpr uint16_t TEXT_LIVEGEN_MARIO = 0xE000;   // safely above all vanilla/rando textIds
 
-static const char* MARIO_DL_PATH = "__OTR__scenes/nonmq/ydan_scene/squadala_mario_DL";
+static const char* MARIO_DL_PATH = "__OTR__scenes/squadala/mario_DL";
 
 // Custom drawFunc — file-scope extern "C" because OPEN_DISPS expands to a
 // local declaration of FrameInterpolation_Record* without extern "C", which

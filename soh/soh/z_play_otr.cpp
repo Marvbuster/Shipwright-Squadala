@@ -40,6 +40,16 @@ extern "C" void OTRPlay_SpawnScene(PlayState* play, s32 sceneId, s32 spawn) {
     std::string scenePath = StringHelper::Sprintf("scenes/%s/%s/%s", sceneVersion.c_str(), scene->sceneFile.fileName,
                                                   scene->sceneFile.fileName);
 
+    // Squadala debug-room redirect: when the debug-room override is active we
+    // load our standalone scene (entirely under scenes/squadala/) instead of
+    // whatever vanilla scene the entrance points to. sceneNum stays at the
+    // original value so music + scene-title-card behave normally; only the
+    // actual scene/room/collision/DL/VTX bytes come from our archive.
+    if (LiveGen_IsDebugRoomActive()) {
+        scenePath = "scenes/squadala/dungeon_scene";
+        SPDLOG_INFO("LiveGen: redirected scene load to {}", scenePath);
+    }
+
     play->sceneSegment = OTRPlay_LoadFile(play, scenePath.c_str());
 
     // Failed to load scene... default to doodongs cavern
