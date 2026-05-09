@@ -39,8 +39,11 @@ extern "C" GetItemEntry ItemTable_Retrieve(int16_t getItemID);
 
 static constexpr uint8_t  GI_LIVEGEN_MARIO   = 0x7E;     // unused in z64item.h, fits 7-bit chest params
 static constexpr uint16_t TEXT_LIVEGEN_MARIO = 0xE000;   // safely above all vanilla/rando textIds
+static constexpr uint8_t  GI_LIVEGEN_SONIC   = 0x7F;     // next free slot in the same gap
+static constexpr uint16_t TEXT_LIVEGEN_SONIC = 0xE001;
 
 static const char* MARIO_DL_PATH = "__OTR__scenes/squadala/mario_DL";
+static const char* SONIC_DL_PATH = "__OTR__scenes/squadala/sonic_DL";
 
 // Custom drawFunc — file-scope extern "C" because OPEN_DISPS expands to a
 // local declaration of FrameInterpolation_Record* without extern "C", which
@@ -65,6 +68,23 @@ extern "C" void LiveGen_DrawMarioItem(PlayState* play, GetItemEntry* /*entry*/) 
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
+extern "C" void LiveGen_DrawSonicItem(PlayState* play, GetItemEntry* /*entry*/) {
+    OPEN_DISPS(play->state.gfxCtx);
+    Gfx* dl = ResourceMgr_LoadGfxByName(SONIC_DL_PATH);
+    if (dl != nullptr) {
+        // Sonic's source mesh is taller than Mario's at the same parse-time
+        // scale, so we shrink the GetItem display so the two chest rewards
+        // read at roughly the same on-screen size (Mario is 0.3, Sonic
+        // tuned-down to 0.216 ≈ Mario × 0.72).
+        Matrix_Scale(0.216f, 0.216f, 0.216f, MTXMODE_APPLY);
+        gSPMatrix(POLY_OPA_DISP++,
+                  Matrix_NewMtx(play->state.gfxCtx, __FILE__, __LINE__),
+                  G_MTX_MODELVIEW | G_MTX_LOAD);
+        gSPDisplayList(POLY_OPA_DISP++, dl);
+    }
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
 // OnActorUpdate hook for ACTOR_EN_BOX — fires every frame after the chest's
 // own update. EnBox calls Actor_OfferGetItemNearby with the negative getItemId,
 // which sets player->getItemId but NOT player->getItemEntry. Player_DrawGetItemImpl
@@ -79,7 +99,7 @@ extern "C" void LiveGen_DrawMarioItem(PlayState* play, GetItemEntry* /*entry*/) 
 extern "C" void LiveGen_EnBoxUpdate(void* actor) {
     EnBox* box = static_cast<EnBox*>(actor);
     int16_t chest_giid = (box->dyna.actor.params >> 5) & 0x7F;
-    if (chest_giid != GI_LIVEGEN_MARIO) {
+    if (chest_giid != GI_LIVEGEN_MARIO && chest_giid != GI_LIVEGEN_SONIC) {
         return;
     }
     if (gPlayState == nullptr) {
@@ -89,7 +109,7 @@ extern "C" void LiveGen_EnBoxUpdate(void* actor) {
     if (player == nullptr) {
         return;
     }
-    if (player->getItemId == -GI_LIVEGEN_MARIO || player->getItemId == GI_LIVEGEN_MARIO) {
+    if (player->getItemId == -chest_giid || player->getItemId == chest_giid) {
         // Mirror player->getItemId's sign onto the entry's getItemId field so
         // the (id != entry.getItemId) check in z_player.c:7318 / 14133 always
         // sees a match and uses our entry directly — no fallback lookup with
@@ -101,7 +121,7 @@ extern "C" void LiveGen_EnBoxUpdate(void* actor) {
         //   - vanilla func_8083A434 flips both id and entry.getItemId to
         //     positive once the chest open flow starts, and our hook re-fires
         //     with the now-positive id and writes a positive entry.getItemId.
-        GetItemEntry entry = ItemTable_Retrieve(GI_LIVEGEN_MARIO);
+        GetItemEntry entry = ItemTable_Retrieve(chest_giid);
         entry.getItemId = player->getItemId;
         player->getItemEntry = entry;
     }
@@ -121,41 +141,65 @@ static void LiveGen_BuildMarioMessage(uint16_t* /*textId*/, bool* loadFromMessag
     *loadFromMessageTable = false;
 }
 
-static void LiveGen_RegisterItems() {
+static void LiveGen_BuildSonicMessage(uint16_t* /*textId*/, bool* loadFromMessageTable) {
+    CustomMessage msg(
+        "You found %rSonic%w in the chest!^Gotta go fast!",
+        "Du hast %rSonic%w in der Truhe gefunden!^Gotta go fast!",
+        "Vous avez trouvé %rSonic%w dans le coffre !^Gotta go fast !",
+        TEXTBOX_TYPE_BLUE);
+    msg.Format();
+    msg.LoadIntoFont();
+    *loadFromMessageTable = false;
+}
+
+static void LiveGen_RegisterItem(uint8_t giId, uint16_t textId,
+                                   void (*drawFunc)(PlayState*, GetItemEntry*),
+                                   void (*messageBuilder)(uint16_t*, bool*),
+                                   const char* label) {
     GetItemEntry entry = GET_ITEM(
-        ITEM_NONE,                  // itemId — no inventory side-effect
-        OBJECT_GI_HEARTS,           // objectId — placeholder (drawFunc overrides)
-        GID_HEART_PIECE,            // drawId — placeholder (drawFunc overrides)
-        TEXT_LIVEGEN_MARIO,         // textId — handled by OnOpenText hook above
-        0x80,                       // field — standard "wait for animation"
+        ITEM_NONE,                  // no inventory side-effect
+        OBJECT_GI_HEARTS,           // placeholder (drawFunc overrides)
+        GID_HEART_PIECE,            // placeholder (drawFunc overrides)
+        textId,                     // handled by the per-item OnOpenText hook
+        0x80,                       // standard "wait for animation"
         CHEST_ANIM_LONG,            // big-chest kneel animation
         ITEM_CATEGORY_MAJOR,
         MOD_NONE,
-        GI_LIVEGEN_MARIO);
-    entry.drawFunc = LiveGen_DrawMarioItem;
+        giId);
+    entry.drawFunc = drawFunc;
 
-    // Overwrite the empty 0x7E placeholder put there by VanillaItemTable_Init.
-    bool ok = ItemTableManager::Instance->SetItemEntry(MOD_NONE, GI_LIVEGEN_MARIO, entry);
-    SPDLOG_INFO("LiveGen: registered Mario item at GI=0x{:X} textId=0x{:X} (ok={})",
-                GI_LIVEGEN_MARIO, TEXT_LIVEGEN_MARIO, ok);
+    bool ok = ItemTableManager::Instance->SetItemEntry(MOD_NONE, giId, entry);
+    SPDLOG_INFO("LiveGen: registered {} item at GI=0x{:X} textId=0x{:X} (ok={})",
+                label, giId, textId, ok);
 
     GameInteractor::Instance->RegisterGameHookForID<GameInteractor::OnOpenText>(
-        TEXT_LIVEGEN_MARIO, LiveGen_BuildMarioMessage);
+        textId, messageBuilder);
+}
 
-    // Patch player->getItemEntry every frame so Player_DrawGetItemImpl picks up
-    // our drawFunc (vanilla En_Box only sets player->getItemId, not the entry).
+static void LiveGen_RegisterItems() {
+    LiveGen_RegisterItem(GI_LIVEGEN_MARIO, TEXT_LIVEGEN_MARIO,
+                         LiveGen_DrawMarioItem, LiveGen_BuildMarioMessage, "Mario");
+    LiveGen_RegisterItem(GI_LIVEGEN_SONIC, TEXT_LIVEGEN_SONIC,
+                         LiveGen_DrawSonicItem, LiveGen_BuildSonicMessage, "Sonic");
+
+    // Single OnActorUpdate hook handles all our chest-content IDs (gated on
+    // EnBox params); vanilla En_Box only sets player->getItemId, not the
+    // full entry, so Player_DrawGetItemImpl needs us to patch the entry
+    // every frame to pick up our drawFunc.
     GameInteractor::Instance->RegisterGameHookForID<GameInteractor::OnActorUpdate>(
         ACTOR_EN_BOX, LiveGen_EnBoxUpdate);
 
-    // Force the slow kneel-and-pull cutscene for our chest specifically.
-    // Vanilla's vanillaPlaySlowChestCS check requires itemId != ITEM_NONE; since
-    // we keep itemId = ITEM_NONE (no inventory side-effect), we override the
-    // decision here, gated on the chest's getItemId marker so it only applies
-    // to LiveGen-marked chests.
+    // Force the slow kneel-and-pull cutscene for our chests. Vanilla's
+    // vanillaPlaySlowChestCS check requires itemId != ITEM_NONE; since we
+    // keep itemId = ITEM_NONE, we override the decision here, gated on the
+    // chest's getItemId marker so vanilla chests are unaffected.
     REGISTER_VB_SHOULD(VB_PLAY_SLOW_CHEST_CS, {
         EnBox* chest = va_arg(args, EnBox*);
-        if (chest && ((chest->dyna.actor.params >> 5) & 0x7F) == GI_LIVEGEN_MARIO) {
-            *should = true;
+        if (chest) {
+            uint8_t gi = (chest->dyna.actor.params >> 5) & 0x7F;
+            if (gi == GI_LIVEGEN_MARIO || gi == GI_LIVEGEN_SONIC) {
+                *should = true;
+            }
         }
     });
 }
