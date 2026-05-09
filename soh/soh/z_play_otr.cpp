@@ -90,11 +90,9 @@ void OTRPlay_InitScene(PlayState* play, s32 spawn) {
     gSaveContext.worldMapArea = 0;
     OTRScene_ExecuteCommands(play, (SOH::Scene*)play->sceneSegment);
 
-    if (LiveGen_IsDebugRoomActive()) {
-        SPDLOG_WARN("LiveGen: clearing scene transition actors after scene commands");
-        play->transiActorCtx.numActors = 0;
-        play->transiActorCtx.list = nullptr;
-    }
+    // (M7-3b) The v0.5 safety net that nuked transiActorCtx for debug rooms
+    // is gone — multi-room scenes need their En_Holl/En_Door entries to
+    // actually spawn so room transitions can fire.
 
     GameInteractor_ExecuteAfterSceneCommands(play->sceneNum);
     Play_InitEnvironment(play, play->skyboxId);

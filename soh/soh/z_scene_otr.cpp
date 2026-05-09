@@ -493,13 +493,10 @@ extern "C" s32 OTRfunc_800973FC(PlayState* play, RoomContext* roomCtx) {
             OTRScene_ExecuteCommands(play, (SOH::Scene*)roomCtx->roomToLoad);
 
             Player_SetBootData(play, GET_PLAYER(play));
-            if (!LiveGen_IsDebugRoomActive()) {
-                Actor_SpawnTransitionActors(play, &play->actorCtx);
-            } else {
-                play->transiActorCtx.numActors = 0;
-                play->transiActorCtx.list = nullptr;
-                SPDLOG_INFO("LiveGen: Skipped Actor_SpawnTransitionActors (debug room)");
-            }
+            // (M7-3b) Always spawn transition actors — debug rooms now
+            // ship En_Holl/En_Door entries that need to actually exist
+            // for the room-transition flow.
+            Actor_SpawnTransitionActors(play, &play->actorCtx);
 
             GameInteractor_ExecuteAfterSceneCommands(play->sceneNum);
 
@@ -513,10 +510,9 @@ extern "C" s32 OTRfunc_800973FC(PlayState* play, RoomContext* roomCtx) {
 }
 
 extern "C" s32 OTRfunc_8009728C(PlayState* play, RoomContext* roomCtx, s32 roomNum) {
-    if (LiveGen_IsDebugRoomActive() && roomNum != 0) {
-        SPDLOG_WARN("LiveGen: blocked room load {} while debug room is active", roomNum);
-        return 0;
-    }
+    // (M7-3b) The v0.5 safety net that blocked any room load other than
+    // room 0 is gone — multi-room scenes need real loads of rooms 1+ when
+    // En_Holl/En_Door fires a transition.
 
     u32 size;
 
