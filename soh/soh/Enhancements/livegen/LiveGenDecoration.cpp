@@ -34,6 +34,11 @@ constexpr s16 PIZZA_ROT_OFFSET_Y = (s16)0x8000;
 // apply translate + Y-spin here.
 static const char* PIZZA_DL_PATH = "__OTR__scenes/squadala/pizza_DL";
 
+// The pizza decoration is anchored to Room 0 (where the Mario chest lives).
+// Drawing it in Room 1/2 leaves a phantom spinning pizza floating in the
+// adjacent room when curRoom culls Room 0's mesh.
+constexpr s8 PIZZA_ROOM = 0;
+
 extern "C" void LiveGen_DrawSpinningMario(PlayState* play) {
     if (!LiveGen::IsDebugRoomActive()) {
         return;
@@ -41,8 +46,20 @@ extern "C" void LiveGen_DrawSpinningMario(PlayState* play) {
     if (play == nullptr || play->state.gfxCtx == nullptr) {
         return;
     }
-    // Don't draw during scene transitions — current room not initialized yet.
-    if (play->roomCtx.curRoom.segment == NULL) {
+    // Don't draw during scene transitions — current room not initialised
+    // yet. We accept either segment being non-null because mid-transition
+    // the engine briefly leaves curRoom.segment = NULL while loading the
+    // new room, even though prevRoom (still rendered) is fully ready.
+    if (play->roomCtx.curRoom.segment == NULL &&
+        play->roomCtx.prevRoom.segment == NULL) {
+        return;
+    }
+    // Only draw the pizza in its anchor room. We accept prevRoom too so
+    // it stays visible during room transitions when curRoom has flipped
+    // to the room being loaded but Room 0 is still on screen as the
+    // outgoing side.
+    if (play->roomCtx.curRoom.num != PIZZA_ROOM &&
+        play->roomCtx.prevRoom.num != PIZZA_ROOM) {
         return;
     }
 
