@@ -3184,11 +3184,24 @@ void Actor_FreezeAllEnemies(PlayState* play, ActorContext* actorCtx, s32 duratio
     }
 }
 
+extern bool LiveGen_IsDebugRoomActive(void);
+
 void func_80031B14(PlayState* play, ActorContext* actorCtx) {
     Actor* actor;
     s32 i;
 
+    // LiveGen multi-room scenes can put both En_Holl and En_Door in the
+    // same dungeon. Vanilla never does that, so this room-mismatch cleanup
+    // is fine upstream — it just kills the "other subarea's" door, which
+    // you can't reach anyway. With Squadala you DO go back. Skipping
+    // ACTORCAT_DOOR keeps transition actors alive across all room
+    // transitions; their own logic handles trigger/cull.
+    bool skipDoors = LiveGen_IsDebugRoomActive();
+
     for (i = 0; i < ARRAY_COUNT(actorCtx->actorLists); i++) {
+        if (skipDoors && i == ACTORCAT_DOOR) {
+            continue;
+        }
         actor = actorCtx->actorLists[i].head;
         while (actor != NULL) {
             if ((actor->room >= 0) && (actor->room != play->roomCtx.curRoom.num) &&

@@ -57,8 +57,16 @@ bool HotReloadDungeon(const std::string& o2rPath) {
         "scenes/squadala/room1_Vtx",
         "scenes/squadala/mario_DL",
         "scenes/squadala/mario_Vtx",
+        "scenes/squadala/sonic_DL",
+        "scenes/squadala/sonic_Vtx",
+        "scenes/squadala/hydrant_DL",
+        "scenes/squadala/hydrant_Vtx",
         "scenes/squadala/pizza_DL",
         "scenes/squadala/pizza_Vtx",
+        "scenes/squadala/cupcake_DL",
+        "scenes/squadala/cupcake_Vtx",
+        "scenes/squadala/mouse_DL",
+        "scenes/squadala/mouse_Vtx",
     };
 
     for (const auto& path : paths) {
