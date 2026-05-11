@@ -67,7 +67,9 @@ constexpr RoomDecoration DECORATIONS[] = {
 constexpr size_t NUM_DECORATIONS = sizeof(DECORATIONS) / sizeof(DECORATIONS[0]);
 
 extern "C" void LiveGen_DrawSpinningMario(PlayState* play) {
-    if (!LiveGen::IsDebugRoomActive()) {
+    // Decorations are dungeon-scene-specific (positions baked against the
+    // 3-room Squadala layout). The mesh-lab sandbox has no decorations.
+    if (LiveGen::GetDebugMode() != LiveGen::DebugMode::DUNGEON) {
         return;
     }
     if (play == nullptr || play->state.gfxCtx == nullptr) {

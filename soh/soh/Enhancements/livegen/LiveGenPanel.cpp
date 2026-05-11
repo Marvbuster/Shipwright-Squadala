@@ -12,6 +12,24 @@ void Actor_Kill(Actor* actor);
 
 namespace LiveGen {
 
+// Mesh-lab experiments. Each entry pairs a display name with the .o2r
+// the build pipeline writes for that layout (see
+// tooling/build_box_room.py::build_mesh_lab_o2r). All experiments share
+// the `scenes/squadala_mesh_lab/` namespace — only the byte contents of
+// the archive change between them.
+struct MeshLabExperiment {
+    const char* label;
+    const char* o2rPath;
+};
+static constexpr MeshLabExperiment MESH_LAB_EXPERIMENTS[] = {
+    {"Empty Box",     "./debug_rooms/zzz_mesh_lab_empty.o2r"},
+    {"L-Shape",       "./debug_rooms/zzz_mesh_lab_l_shape.o2r"},
+    {"Maze",          "./debug_rooms/zzz_mesh_lab_maze.o2r"},
+    {"Maze Complex",  "./debug_rooms/zzz_mesh_lab_maze_complex.o2r"},
+};
+static constexpr int NUM_MESH_LAB_EXPERIMENTS =
+    sizeof(MESH_LAB_EXPERIMENTS) / sizeof(MESH_LAB_EXPERIMENTS[0]);
+
 void LiveGenPanel::InitElement() {
     mPromptInput.resize(512, '\0');
     mReplyInput.resize(256, '\0');
@@ -20,11 +38,19 @@ void LiveGenPanel::InitElement() {
 void LiveGenPanel::UpdateElement() {
     CheckPendingResult();
 
-    // Deferred Debug Room: evict + warp happens here (between frames, safe)
-    if (mDebugRoomPending) {
-        mDebugRoomPending = false;
+    // Deferred load: evict + warp happens here (between frames, safe).
+    // The two targets share the warp/activate plumbing but pick different
+    // archives, namespaces and DebugMode values.
+    if (mPendingLoad == PendingLoad::DUNGEON) {
+        mPendingLoad = PendingLoad::NONE;
         HotReloadDungeon("./debug_rooms/zzz_squadala_dungeon.o2r");
-        SetDebugRoomActive(true);
+        SetDebugMode(DebugMode::DUNGEON);
+        WarpToEntrance(0x0000);
+        mDebugRoomActive = true;
+    } else if (mPendingLoad == PendingLoad::MESH_LAB) {
+        mPendingLoad = PendingLoad::NONE;
+        HotReloadMeshLab(mPendingMeshLabPath);
+        SetDebugMode(DebugMode::MESH_LAB);
         WarpToEntrance(0x0000);
         mDebugRoomActive = true;
     }
@@ -84,12 +110,37 @@ void LiveGenPanel::DrawStatusBar() {
         ImGui::TextColored(ImVec4(1.0f, 0.2f, 0.2f, 1.0f), "Sidecar: Not Running");
     }
 
-    // Debug Room button — hot-reloads custom geometry and warps directly
+    // Debug Room: full 3-room Squadala dungeon (chests, actors, decorations).
     ImGui::SameLine();
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.9f, 0.5f, 0.1f, 1.0f));
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(1.0f, 0.6f, 0.2f, 1.0f));
     if (ImGui::SmallButton("Debug Room")) {
-        mDebugRoomPending = true;  // Deferred to next UpdateElement (safe, between frames)
+        mPendingLoad = PendingLoad::DUNGEON;
+    }
+    ImGui::PopStyleColor(2);
+
+    // Mesh Lab: dropdown of experiments + Load button. Each entry is a
+    // separate single-room .o2r under the shared mesh-lab namespace; the
+    // load handler swaps in the selected archive and warps Link in.
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(110);
+    if (ImGui::BeginCombo("##mesh_lab_select",
+                          MESH_LAB_EXPERIMENTS[mMeshLabSelection].label)) {
+        for (int i = 0; i < NUM_MESH_LAB_EXPERIMENTS; i++) {
+            bool selected = (i == mMeshLabSelection);
+            if (ImGui::Selectable(MESH_LAB_EXPERIMENTS[i].label, selected)) {
+                mMeshLabSelection = i;
+            }
+            if (selected) ImGui::SetItemDefaultFocus();
+        }
+        ImGui::EndCombo();
+    }
+    ImGui::SameLine();
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 0.9f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.75f, 1.0f, 1.0f));
+    if (ImGui::SmallButton("Load Lab")) {
+        mPendingMeshLabPath = MESH_LAB_EXPERIMENTS[mMeshLabSelection].o2rPath;
+        mPendingLoad = PendingLoad::MESH_LAB;
     }
     ImGui::PopStyleColor(2);
 
@@ -190,15 +241,18 @@ void LiveGenPanel::DrawInputArea() {
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.1f, 0.7f, 0.2f, 1.0f));
             ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.2f, 0.9f, 0.3f, 1.0f));
             if (ImGui::Button("Enter Dungeon", ImVec2(ImGui::GetContentRegionAvail().x * 0.7f, 36))) {
-                // Hot-reload dungeon and activate portal
-                HotReloadDungeon("./debug_rooms/zzz_squadala_dungeon.o2r");
-                // Get dungeon name from spec
+                // Stage the CUSTOM dungeon (its own namespace, so loading
+                // doesn't collide with the 3-room Debug Room) and spawn
+                // the Door_Warp1 pillar. Portal trigger flips DebugMode
+                // to CUSTOM_DUNGEON and warps Link into the simple room.
+                HotReloadCustomDungeon("./debug_rooms/zzz_squadala_custom_dungeon.o2r");
                 std::string dname = "Custom Dungeon";
                 try {
                     auto spec = nlohmann::json::parse(mLastSpecJson);
                     dname = spec.value("metadata", nlohmann::json::object()).value("name", dname);
                 } catch (...) {}
                 EntranceManager::Instance().Activate(0x0000, dname);
+                SpawnEntryPortal();
             }
             ImGui::PopStyleColor(2);
             ImGui::SameLine();
@@ -357,8 +411,9 @@ void LiveGenPanel::DrawDungeonList() {
                 ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.1f, 0.7f, 0.2f, 1.0f));
                 ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.2f, 0.9f, 0.3f, 1.0f));
                 if (ImGui::Button("Enter Dungeon", ImVec2(ImGui::GetContentRegionAvail().x - 40, 28))) {
-                    HotReloadDungeon("./debug_rooms/zzz_squadala_dungeon.o2r");
+                    HotReloadCustomDungeon("./debug_rooms/zzz_squadala_custom_dungeon.o2r");
                     EntranceManager::Instance().Activate(0x0000, dungeon.name);
+                    SpawnEntryPortal();
                 }
                 ImGui::PopStyleColor(2);
             }
@@ -377,7 +432,10 @@ void LiveGenPanel::DrawDungeonList() {
                     auto resp = mClient.HttpPost("http://127.0.0.1:7777/dungeons/" + did + "/activate",
                         nlohmann::json::object());
                     SPDLOG_INFO("LiveGen: Activate: {}", resp.substr(0, 200));
-                    // Hot-reload so no restart needed!
+                    // Hot-reload so no restart needed! Don't flip DebugMode
+                    // here — Activate&Compile just makes the dungeon ready,
+                    // the actual mode switch happens on the subsequent
+                    // "Enter Dungeon" click.
                     HotReloadDungeon("./debug_rooms/zzz_squadala_dungeon.o2r");
                     mDungeonListRefreshCounter = 0;
                 }).detach();

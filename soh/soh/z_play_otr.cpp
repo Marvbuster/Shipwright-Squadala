@@ -10,6 +10,7 @@
 extern "C" void Play_InitScene(PlayState* play, s32 spawn);
 extern "C" void Play_InitEnvironment(PlayState* play, s16 skyboxId);
 extern "C" bool LiveGen_IsDebugRoomActive();
+extern "C" const char* LiveGen_GetDebugScenePath();
 void OTRPlay_InitScene(PlayState* play, s32 spawn);
 s32 OTRScene_ExecuteCommands(PlayState* play, SOH::Scene* scene);
 
@@ -41,12 +42,13 @@ extern "C" void OTRPlay_SpawnScene(PlayState* play, s32 sceneId, s32 spawn) {
                                                   scene->sceneFile.fileName);
 
     // Squadala debug-room redirect: when the debug-room override is active we
-    // load our standalone scene (entirely under scenes/squadala/) instead of
-    // whatever vanilla scene the entrance points to. sceneNum stays at the
-    // original value so music + scene-title-card behave normally; only the
-    // actual scene/room/collision/DL/VTX bytes come from our archive.
+    // load our standalone scene instead of whatever vanilla scene the entrance
+    // points to. sceneNum stays at the original value so music + scene-title-
+    // card behave normally; only the actual scene/room/collision/DL/VTX bytes
+    // come from our archive. Mode picks the namespace (full dungeon vs. empty
+    // mesh-lab sandbox).
     if (LiveGen_IsDebugRoomActive()) {
-        scenePath = "scenes/squadala/dungeon_scene";
+        scenePath = LiveGen_GetDebugScenePath();
         SPDLOG_INFO("LiveGen: redirected scene load to {}", scenePath);
     }
 

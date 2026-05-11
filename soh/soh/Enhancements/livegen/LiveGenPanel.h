@@ -56,8 +56,13 @@ class LiveGenPanel : public Ship::GuiWindow {
     std::string mActiveDungeonId;
     int mDungeonListRefreshCounter = 0;
 
-    // Debug Room deferred loading (evict between frames, not during rendering)
-    bool mDebugRoomPending = false;
+    // Debug-room deferred loading (evict between frames, not during render).
+    // Two target classes: full 3-room dungeon, or one of the mesh-lab
+    // experiments (each ships its own .o2r under the lab namespace).
+    enum class PendingLoad { NONE, DUNGEON, MESH_LAB };
+    PendingLoad mPendingLoad = PendingLoad::NONE;
+    int mMeshLabSelection = 0;   // index into MESH_LAB_EXPERIMENTS
+    std::string mPendingMeshLabPath;
     bool mDebugRoomActive = false;
 
     void StartSession();
