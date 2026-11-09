@@ -42,4 +42,20 @@ const char* GetDebugScenePath();
 void SpawnEntryPortal();
 void SpawnExitPortal(float x, float y, float z);
 
+// Arm a dungeon-signature title card for the next OnTransitionEnd.
+// Notification::Emit fires the on-screen pop the moment the destination
+// scene finishes loading. Resets itself after one shot.
+void ArmTitleCard(const std::string& dungeonName);
+
+// Currently active mesh-lab name (from MESH_LAB_EXPERIMENTS.label).
+// Decorations can gate on this to only render in specific labs.
+void SetCurrentLabName(const char* labelOrNull);
+const char* GetCurrentLabName();
+
+// Spawn the exit warp at a clear spot near Link (raycast same as entry
+// portal). The Door_Warp1 cutscene fires, sets nextEntranceIndex to the
+// saved pre-dungeon entrance, OnTransitionEnd restores Link's position.
+// No-op if there's no valid pre-dungeon state to return to.
+void SpawnExitWarp();
+
 } // namespace LiveGen

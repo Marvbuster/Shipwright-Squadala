@@ -8,6 +8,7 @@
 
 #include <spdlog/spdlog.h>
 #include <chrono>
+#include <cstring>
 
 // Use ResourceMgr_LoadGfxByName directly to resolve __OTR__ paths.
 // We can't rely on the gSPDisplayList wrapper because in C++ scope the macro
@@ -67,12 +68,40 @@ constexpr RoomDecoration DECORATIONS[] = {
 constexpr size_t NUM_DECORATIONS = sizeof(DECORATIONS) / sizeof(DECORATIONS[0]);
 
 extern "C" void LiveGen_DrawSpinningMario(PlayState* play) {
-    // Decorations are dungeon-scene-specific (positions baked against the
-    // 3-room Squadala layout). The mesh-lab sandbox has no decorations.
-    if (LiveGen::GetDebugMode() != LiveGen::DebugMode::DUNGEON) {
+    if (play == nullptr || play->state.gfxCtx == nullptr) {
         return;
     }
-    if (play == nullptr || play->state.gfxCtx == nullptr) {
+
+    // Mesh-lab-only decorations branch off first — they're cheaper and
+    // independent of the 3-room dungeon's decoration set. Currently just
+    // the vanilla Forest Temple ladder DL placed in the two-level lab.
+    if (LiveGen::GetDebugMode() == LiveGen::DebugMode::MESH_LAB) {
+        const char* labName = LiveGen::GetCurrentLabName();
+        if (labName && std::strcmp(labName, "Two Level") == 0) {
+            Gfx* ladderDL = ResourceMgr_LoadGfxByName(
+                "__OTR__objects/object_mori_objects/gMoriHashigoLadderDL");
+            if (ladderDL) {
+                OPEN_DISPS(play->state.gfxCtx);
+                Matrix_Push();
+                // Position against the platform's south face. Platform
+                // top is at y=+100, main floor at y=-100. Ladder DL sits
+                // flush with the wall plane (z=-200) and bottom on the
+                // main floor (y=-100). Center on x=-400 (middle of the
+                // platform's south face, x∈[-700,-100]).
+                Matrix_Translate(-400.0f, -100.0f, -200.0f, MTXMODE_NEW);
+                gSPMatrix(POLY_OPA_DISP++,
+                          Matrix_NewMtx(play->state.gfxCtx, __FILE__, __LINE__),
+                          G_MTX_MODELVIEW | G_MTX_LOAD);
+                gSPDisplayList(POLY_OPA_DISP++, ladderDL);
+                Matrix_Pop();
+                CLOSE_DISPS(play->state.gfxCtx);
+            }
+        }
+        return;
+    }
+
+    // The remaining decorations (Pizza/Cupcake/Mouse) are dungeon-only.
+    if (LiveGen::GetDebugMode() != LiveGen::DebugMode::DUNGEON) {
         return;
     }
     // Don't draw during scene transitions — current room not initialised

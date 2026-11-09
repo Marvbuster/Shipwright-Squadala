@@ -26,6 +26,7 @@ static constexpr MeshLabExperiment MESH_LAB_EXPERIMENTS[] = {
     {"L-Shape",       "./debug_rooms/zzz_mesh_lab_l_shape.o2r"},
     {"Maze",          "./debug_rooms/zzz_mesh_lab_maze.o2r"},
     {"Maze Complex",  "./debug_rooms/zzz_mesh_lab_maze_complex.o2r"},
+    {"Two Level",     "./debug_rooms/zzz_mesh_lab_two_level.o2r"},
 };
 static constexpr int NUM_MESH_LAB_EXPERIMENTS =
     sizeof(MESH_LAB_EXPERIMENTS) / sizeof(MESH_LAB_EXPERIMENTS[0]);
@@ -51,6 +52,7 @@ void LiveGenPanel::UpdateElement() {
         mPendingLoad = PendingLoad::NONE;
         HotReloadMeshLab(mPendingMeshLabPath);
         SetDebugMode(DebugMode::MESH_LAB);
+        SetCurrentLabName(MESH_LAB_EXPERIMENTS[mMeshLabSelection].label);
         WarpToEntrance(0x0000);
         mDebugRoomActive = true;
     }
@@ -118,6 +120,19 @@ void LiveGenPanel::DrawStatusBar() {
         mPendingLoad = PendingLoad::DUNGEON;
     }
     ImGui::PopStyleColor(2);
+
+    // Exit Warp: only shown while we're inside a custom dungeon. Spawns
+    // a Door_Warp1 at a clear spot near Link; stepping in fires the
+    // boss-clear cutscene and warps back to PreDungeonState.
+    if (GetDebugMode() == DebugMode::CUSTOM_DUNGEON) {
+        ImGui::SameLine();
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.2f, 1.0f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.9f, 0.4f, 1.0f, 1.0f));
+        if (ImGui::SmallButton("Exit Warp")) {
+            SpawnExitWarp();
+        }
+        ImGui::PopStyleColor(2);
+    }
 
     // Mesh Lab: dropdown of experiments + Load button. Each entry is a
     // separate single-room .o2r under the shared mesh-lab namespace; the
@@ -241,10 +256,6 @@ void LiveGenPanel::DrawInputArea() {
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.1f, 0.7f, 0.2f, 1.0f));
             ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.2f, 0.9f, 0.3f, 1.0f));
             if (ImGui::Button("Enter Dungeon", ImVec2(ImGui::GetContentRegionAvail().x * 0.7f, 36))) {
-                // Stage the CUSTOM dungeon (its own namespace, so loading
-                // doesn't collide with the 3-room Debug Room) and spawn
-                // the Door_Warp1 pillar. Portal trigger flips DebugMode
-                // to CUSTOM_DUNGEON and warps Link into the simple room.
                 HotReloadCustomDungeon("./debug_rooms/zzz_squadala_custom_dungeon.o2r");
                 std::string dname = "Custom Dungeon";
                 try {
@@ -253,6 +264,7 @@ void LiveGenPanel::DrawInputArea() {
                 } catch (...) {}
                 EntranceManager::Instance().Activate(0x0000, dname);
                 SpawnEntryPortal();
+                ArmTitleCard(dname);
             }
             ImGui::PopStyleColor(2);
             ImGui::SameLine();
@@ -414,6 +426,7 @@ void LiveGenPanel::DrawDungeonList() {
                     HotReloadCustomDungeon("./debug_rooms/zzz_squadala_custom_dungeon.o2r");
                     EntranceManager::Instance().Activate(0x0000, dungeon.name);
                     SpawnEntryPortal();
+                    ArmTitleCard(dungeon.name);
                 }
                 ImGui::PopStyleColor(2);
             }

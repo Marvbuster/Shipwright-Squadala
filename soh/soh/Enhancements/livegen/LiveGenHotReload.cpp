@@ -4,7 +4,9 @@
 #include <ship/resource/ResourceManager.h>
 #include <ship/resource/archive/ArchiveManager.h>
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
+#include "soh/Notification/Notification.h"
 #include "soh/ShipInit.hpp"
+#include "title_cards/custom_dungeon_ia8.h"
 #include <cmath>
 
 extern "C" {
@@ -35,6 +37,12 @@ s32 Object_Spawn(ObjectContext* objectCtx, s16 objectId);
 namespace LiveGen {
 
 static DebugMode sDebugMode = DebugMode::OFF;
+static std::string sCurrentLabName;
+
+// Flag bridges HotReloadMeshLab (sets) to the OnSceneInit hook (reads
+// + clears). File-scope so both can see it — the anonymous namespace
+// below isn't visible to the earlier HotReloadMeshLab definition.
+static bool sPendingLabEviction = false;
 
 void SetDebugMode(DebugMode mode) {
     sDebugMode = mode;
@@ -146,19 +154,30 @@ bool HotReloadMeshLab(const std::string& o2rPath) {
         SPDLOG_INFO("LiveGen: Hot-reload — added mesh-lab archive: {}", o2rPath);
     }
 
-    // NOTE: we deliberately do NOT evict + preload the lab resources here.
-    // Eviction tears the resource pointers out from under the graphics
-    // thread, which may already be mid-frame processing DL commands
-    // (G_VTX, G_SETTIMG, G_BRANCH_LIST, …) that resolve through
-    // gSegments[] indirection. Freeing the backing data leaves dangling
-    // pointers in the interpreter's working set → "Unhandled OP 0x17"
-    // (garbage interpreted as F3DEX2) → SIGSEGV in SETTIMG/SETCIMG.
+    // All lab layouts share the `scenes/squadala_mesh_lab/` namespace, so
+    // without invalidation the resource cache would keep serving whichever
+    // layout was loaded first and switching labs becomes a no-op.
     //
-    // Trade-off: rebuilding the lab .o2r mid-session won't take effect
-    // until SoH is restarted. The flag-reset block below still gives a
-    // fresh in-game state on every Load Lab click (chests respawn, door
-    // re-locks via its temp switch flag), which is what the user actually
-    // needs from "Load Lab" in normal use.
+    // UnloadResource is unsafe here — it drops the cached shared_ptr
+    // immediately. The graphics thread can still hold raw pointers into
+    // that data mid-frame; freeing it crashes the F3DEX2 interpreter.
+    // resource->Dirty() is the safe alternative: marks the cache entry
+    // stale so the next LoadResource re-fetches from the latest archive
+    // (which we just AddArchive'd), but leaves the existing data alive
+    // for any in-flight reader.
+    for (const auto& path : {
+        "scenes/squadala_mesh_lab/dungeon_scene",
+        "scenes/squadala_mesh_lab/collision",
+        "scenes/squadala_mesh_lab/room_0",
+        "scenes/squadala_mesh_lab/room0_DL",
+        "scenes/squadala_mesh_lab/room0_Vtx",
+    }) {
+        auto res = resMgr->LoadResource(path);
+        if (res) {
+            res->Dirty();
+        }
+    }
+    SPDLOG_INFO("LiveGen: Mesh-lab cache marked dirty (safe reload)");
 
     // Lab chests must respawn on every hot-reload, otherwise the player
     // gets into a dead state: chest's persistent treasure_flag stays set
@@ -203,6 +222,8 @@ Actor* sActiveWarp = nullptr;
 bool sPortalIsEntry = false;
 bool sExitPortalSpawnedThisScene = false;
 bool sPendingPositionRestore = false;
+bool sTitleCardPending = false;
+std::string sTitleCardName;
 
 // Trigger radius around the warp's centre — empirical, roughly two Link-
 // widths so the player has to walk INTO the pillar (not just brush past).
@@ -262,18 +283,34 @@ void MaybeSpawnExitPortal() {
 void OnSceneInitForPortal(int16_t /*sceneNum*/) {
     sExitPortalSpawnedThisScene = false;
     sActiveWarp = nullptr;  // any prev-scene warp died with the scene
+
+    // No-op: lab eviction moved out of OnSceneInit. The hook fires AFTER
+    // play->sceneSegment / play->roomCtx point at freshly-cached scene
+    // resources; UnloadResource would yank the backing data out from
+    // under those raw pointers and Play_Init crashes on the next field
+    // access. See HotReloadMeshLab where we Dirty() the resources instead
+    // — that flag drops the cached shared_ptr on next LoadResource but
+    // leaves the existing data alive until all in-flight users release.
 }
 
 void OnTransitionEndForPortal(int16_t /*sceneNum*/) {
-    if (!sPendingPositionRestore || !sPreDungeon.valid || !gPlayState) return;
-    sPendingPositionRestore = false;
-    Player* player = GET_PLAYER(gPlayState);
-    if (player) {
-        player->actor.world.pos = sPreDungeon.playerPos;
-        player->actor.shape.rot.y = sPreDungeon.playerRotY;
-        SPDLOG_INFO("LiveGen: Restored pre-dungeon position");
+    // Title-card display is now handled solely by EntranceManager's
+    // "Entering: <name>" notification (shown when the portal fires).
+    // We drop our duplicate here AND keep the IA8-texture path
+    // referenced for the future proper integration.
+    sTitleCardPending = false;
+    (void)kCustomDungeonTitleCardIA8;
+
+    if (sPendingPositionRestore && sPreDungeon.valid && gPlayState) {
+        sPendingPositionRestore = false;
+        Player* player = GET_PLAYER(gPlayState);
+        if (player) {
+            player->actor.world.pos = sPreDungeon.playerPos;
+            player->actor.shape.rot.y = sPreDungeon.playerRotY;
+            SPDLOG_INFO("LiveGen: Restored pre-dungeon position");
+        }
+        sPreDungeon.valid = false;  // one-shot, don't restore again
     }
-    sPreDungeon.valid = false;  // one-shot, don't restore again
 }
 
 }  // anonymous namespace
@@ -289,6 +326,17 @@ void RegisterPortalHooks() {
         OnSceneInitForPortal);
     GameInteractor::Instance->RegisterGameHook<GameInteractor::OnTransitionEnd>(
         OnTransitionEndForPortal);
+
+    // Suppress the vanilla title card when we're in a custom-dungeon
+    // entry — it would auto-load gDekuTreeTitleCardENGTex ("Im Deku Baum")
+    // because our sceneNum is 0 / Deku Tree. EntranceManager already pops
+    // the "Entering: <name>" notification, so vanilla card is redundant +
+    // wrong-named.
+    REGISTER_VB_SHOULD(VB_SHOW_TITLE_CARD, {
+        if (GetDebugMode() == DebugMode::CUSTOM_DUNGEON) {
+            *should = false;
+        }
+    });
 }
 
 // Look around Link for an open spot at `kPortalDist` away. Tries up to 12
@@ -399,6 +447,52 @@ void SpawnExitPortal(float x, float y, float z) {
         sPortalIsEntry = false;
         sExitPortalSpawnedThisScene = true;
     }
+}
+
+void ArmTitleCard(const std::string& dungeonName) {
+    sTitleCardPending = true;
+    sTitleCardName = dungeonName;
+    SPDLOG_INFO("LiveGen: Title card armed: '{}'", dungeonName);
+}
+
+void SetCurrentLabName(const char* labelOrNull) {
+    sCurrentLabName = labelOrNull ? labelOrNull : "";
+}
+
+const char* GetCurrentLabName() {
+    return sCurrentLabName.c_str();
+}
+
+void SpawnExitWarp() {
+    if (!gPlayState) {
+        SPDLOG_ERROR("LiveGen: SpawnExitWarp: no PlayState");
+        return;
+    }
+    if (!sPreDungeon.valid) {
+        SPDLOG_WARN("LiveGen: SpawnExitWarp: no PreDungeonState — nowhere to return");
+        return;
+    }
+    Player* player = GET_PLAYER(gPlayState);
+    if (!player) return;
+
+    Vec3f spot = FindClearPortalSpot(gPlayState, player->actor.world.pos,
+                                      player->actor.shape.rot.y);
+    Actor* warp = SpawnWarpActor(gPlayState, spot.x, spot.y, spot.z);
+    if (!warp) return;
+    sActiveWarp = warp;
+    sPortalIsEntry = false;
+    sExitPortalSpawnedThisScene = true;
+
+    // Same boss-clear cutscene flow as the entry, just with the entrance
+    // pointed back at where we came from. SetDebugMode(OFF) so the next
+    // scene load doesn't redirect into squadala_custom/ again.
+    SetDebugMode(DebugMode::OFF);
+    gSaveContext.nextCutsceneIndex = LIVEGEN_NEXT_CUTSCENE_BLUE_WARP;
+    gPlayState->nextEntranceIndex = sPreDungeon.entranceIndex;
+    sPendingPositionRestore = true;
+    Audio_QueueSeqCmd(0x00 << 24 | LIVEGEN_NA_BGM_BOSS_CLEAR);
+    SPDLOG_INFO("LiveGen: Exit warp armed → entrance 0x{:04x}",
+                sPreDungeon.entranceIndex);
 }
 
 void WarpToEntrance(int16_t entranceIndex) {
